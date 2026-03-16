@@ -35,7 +35,10 @@ local State = {
     LoopMode = 1,
     IsMinimized = false,
     LastLrcText = "",
-    MarqueeTween = nil
+    MarqueeTween = nil,
+    CurrentQuery = "",
+    CurrentPage = 1,
+    Limit = 30
 }
 
 local function MakeDraggable(ui)
@@ -134,8 +137,20 @@ local SourceBtn = Instance.new("TextButton", SearchPanel)
 SourceBtn.Size = UDim2.new(0.35, -10, 0, 35); SourceBtn.Position = UDim2.new(0.65, 5, 0, 10); SourceBtn.BackgroundColor3 = Theme.Accent; SourceBtn.TextColor3 = Theme.Text; SourceBtn.Text = "源: Netease"; SourceBtn.Font = Enum.Font.GothamBold; SourceBtn.TextSize = 12; Instance.new("UICorner", SourceBtn)
 
 local ScrollList = Instance.new("ScrollingFrame", SearchPanel)
-ScrollList.Size = UDim2.new(1, -20, 1, -60); ScrollList.Position = UDim2.new(0, 10, 0, 55); ScrollList.BackgroundTransparency = 1; ScrollList.ScrollBarThickness = 2
+ScrollList.Size = UDim2.new(1, -20, 1, -95); ScrollList.Position = UDim2.new(0, 10, 0, 55); ScrollList.BackgroundTransparency = 1; ScrollList.ScrollBarThickness = 2
 local ListLayout = Instance.new("UIListLayout", ScrollList); ListLayout.Padding = UDim.new(0, 5)
+
+local PaginationFrame = Instance.new("Frame", SearchPanel)
+PaginationFrame.Size = UDim2.new(1, -20, 0, 30); PaginationFrame.Position = UDim2.new(0, 10, 1, -35); PaginationFrame.BackgroundTransparency = 1
+
+local PrevBtn = Instance.new("TextButton", PaginationFrame)
+PrevBtn.Size = UDim2.new(0, 60, 1, 0); PrevBtn.Position = UDim2.new(0, 0, 0, 0); PrevBtn.BackgroundColor3 = Theme.Panel; PrevBtn.Text = "上一页"; PrevBtn.TextColor3 = Theme.Text; PrevBtn.Font = Enum.Font.Gotham; PrevBtn.TextSize = 12; Instance.new("UICorner", PrevBtn)
+
+local PageLbl = Instance.new("TextLabel", PaginationFrame)
+PageLbl.Size = UDim2.new(1, -130, 1, 0); PageLbl.Position = UDim2.new(0, 65, 0, 0); PageLbl.BackgroundTransparency = 1; PageLbl.Text = "第 1 页"; PageLbl.TextColor3 = Theme.SubText; PageLbl.Font = Enum.Font.GothamBold; PageLbl.TextSize = 12
+
+local NextBtn = Instance.new("TextButton", PaginationFrame)
+NextBtn.Size = UDim2.new(0, 60, 1, 0); NextBtn.Position = UDim2.new(1, -60, 0, 0); NextBtn.BackgroundColor3 = Theme.Panel; NextBtn.Text = "下一页"; NextBtn.TextColor3 = Theme.Text; NextBtn.Font = Enum.Font.Gotham; NextBtn.TextSize = 12; Instance.new("UICorner", NextBtn)
 
 local isTransitioning = false
 local function UpdateLyricSilk(newText)
@@ -269,14 +284,25 @@ function PlaySong(song)
     end)
 end
 
-SearchInput.FocusLost:Connect(function(e)
-    if not e or SearchInput.Text == "" then return end
+local function DoSearch(query, page)
+    if query == "" then return end
+    State.CurrentQuery = query
+    State.CurrentPage = page
+    PageLbl.Text = "加载中..."
+
     for _, v in pairs(ScrollList:GetChildren()) do if v:IsA("Frame") then v:Destroy() end end
+
     task.spawn(function()
-        local searchUrl = "http://music.163.com/api/search/get/web?s=" .. HttpService:UrlEncode(SearchInput.Text) .. "&type=1"
+        local offset = (page - 1) * State.Limit
+        local searchUrl = "http://music.163.com/api/search/get/web?s=" .. HttpService:UrlEncode(query) .. "&type=1&limit=" .. State.Limit .. "&offset=" .. offset
         local res = req({Url = searchUrl, Method = "GET"})
         local d = HttpService:JSONDecode(res.Body)
-        for _, s in ipairs(d.result.songs or {}) do
+
+        PageLbl.Text = "第 " .. page .. " 页"
+
+        if not d.result or not d.result.songs then return end
+
+        for _, s in ipairs(d.result.songs) do
             local item = Instance.new("Frame", ScrollList)
             item.Size = UDim2.new(1, 0, 0, 40); item.BackgroundColor3 = Theme.Panel; Instance.new("UICorner", item)
             local txt = Instance.new("TextLabel", item)
@@ -288,6 +314,23 @@ SearchInput.FocusLost:Connect(function(e)
         end
         ScrollList.CanvasSize = UDim2.new(0, 0, 0, #d.result.songs * 45)
     end)
+end
+
+SearchInput.FocusLost:Connect(function(e)
+    if not e or SearchInput.Text == "" then return end
+    DoSearch(SearchInput.Text, 1)
+end)
+
+PrevBtn.MouseButton1Click:Connect(function()
+    if State.CurrentPage > 1 then
+        DoSearch(State.CurrentQuery, State.CurrentPage - 1)
+    end
+end)
+
+NextBtn.MouseButton1Click:Connect(function()
+    if State.CurrentQuery ~= "" then
+        DoSearch(State.CurrentQuery, State.CurrentPage + 1)
+    end
 end)
 
 SearchToggle.MouseButton1Click:Connect(function() SearchPanel.Visible = not SearchPanel.Visible end)

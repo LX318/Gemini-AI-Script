@@ -3137,6 +3137,21 @@ Background=Color3.fromHex"#e4e4e7",
 Button=Color3.fromHex"#18181b",
 Icon=Color3.fromHex"#52525b",
 },
+ChocoStrawberry={
+Name="ChocoStrawberry",
+
+Accent=Color3.fromHex"#FDBBD1",
+Dialog=Color3.fromHex"#FFFFFF",
+Outline=Color3.fromHex"#B31D31",
+Text=Color3.fromHex"#3D0914",
+Placeholder=Color3.fromHex"#D0A0B0",
+Background=Color3.fromHex"#D0A0B0",
+Button=Color3.fromHex"#F5E08B",
+Icon=Color3.fromHex"#FDBBD1",
+Toggle=Color3.fromHex"#B31D31",
+Slider=Color3.fromHex"#B31D31",
+Checkbox=Color3.fromHex"#B31D31",
+},
 Rose={
 Name="Rose",
 

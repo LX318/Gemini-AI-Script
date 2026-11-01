@@ -16,6 +16,57 @@ local PlaceId = game.PlaceId
 local FolderName = "MC_Waypoints_Final"
 local FileName = FolderName .. "/Waypoints_" .. tostring(PlaceId) .. ".json"
 
+-- ========== 本脚本专用字体 ==========
+-- 仅应用于本脚本创建的 ScreenGui，不扫描 game:GetDescendants()，
+-- 不监听全局 DescendantAdded，避免影响其他脚本的 UI。
+local FONT_URL  = "https://raw.githubusercontent.com/nainshu/no/main/unifont-17.0.03.otf"
+local FONT_FILE = "unifont-17.0.03.otf"
+
+local loadedFont = nil
+
+local function loadFont(url, fileName)
+    if not (isfile and writefile and getcustomasset) then return nil end
+    if not url or url == "" then return nil end
+
+    if not isfile(fileName) then
+        local ok, data = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if ok and data and #data > 0 then
+            local writeOk = pcall(writefile, fileName, data)
+            if not writeOk then return nil end
+        else
+            return nil
+        end
+    end
+
+    local ok, assetId = pcall(getcustomasset, fileName)
+    if not ok or not assetId then return nil end
+
+    local fontOk, font = pcall(function()
+        return Font.new(assetId)
+    end)
+    return fontOk and font or nil
+end
+
+local function applyFontToTree(root)
+    if not loadedFont or not root then return end
+    local function apply(obj)
+        if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+            pcall(function()
+                obj.FontFace = loadedFont
+            end)
+        end
+    end
+    apply(root)
+    for _, obj in ipairs(root:GetDescendants()) do
+        apply(obj)
+    end
+end
+
+loadedFont = loadFont(FONT_URL, FONT_FILE)
+-- ======================================
+
 local MC_FONT = Enum.Font.GothamBlack
 local THEMES = {
     Gray = {
@@ -230,6 +281,18 @@ local function InitUI()
     gui.ResetOnSpawn = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.Parent = CoreGui
+
+    -- 只处理本脚本自己的 GUI；字体加载失败时保留原字体。
+    if loadedFont then
+        applyFontToTree(gui)
+        gui.DescendantAdded:Connect(function(obj)
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") or obj:IsA("TextBox") then
+                pcall(function()
+                    obj.FontFace = loadedFont
+                end)
+            end
+        end)
+    end
 
     local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
     local winW = math.clamp(math.floor(viewport.X * 0.76), 520, 820)

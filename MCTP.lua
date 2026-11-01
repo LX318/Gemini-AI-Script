@@ -9,6 +9,7 @@
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
+local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local PlaceId = game.PlaceId
@@ -304,9 +305,131 @@ local function InitUI()
     winW = math.max(360, winW)
     winH = math.max(220, winH)
 
-    local toggleContainer, toggleHitbox, toggleText =
-        createThickButton(gui, "锚点\n菜单", UDim2.fromOffset(58, 58),
-            UDim2.new(1, -72, 0.5, -29), THEMES.Gray)
+    -- 小型圆角贴花开关：保留非原版自定义外观
+    local toggleContainer = Instance.new("Frame")
+    toggleContainer.Name = "WaypointToggle"
+    toggleContainer.Size = UDim2.fromOffset(42, 42)
+    toggleContainer.Position = UDim2.new(1, -54, 0.5, -21)
+    toggleContainer.BackgroundColor3 = Color3.fromRGB(24, 26, 30)
+    toggleContainer.BackgroundTransparency = 0.08
+    toggleContainer.BorderSizePixel = 0
+    toggleContainer.Parent = gui
+
+    local toggleCorner = Instance.new("UICorner")
+    toggleCorner.CornerRadius = UDim.new(0, 11)
+    toggleCorner.Parent = toggleContainer
+
+    local toggleStroke = Instance.new("UIStroke")
+    toggleStroke.Color = Color3.fromRGB(82, 88, 98)
+    toggleStroke.Thickness = 1.4
+    toggleStroke.Transparency = 0.12
+    toggleStroke.Parent = toggleContainer
+
+    local toggleImage = Instance.new("ImageLabel")
+    toggleImage.Name = "Logo"
+    toggleImage.Size = UDim2.new(1, -8, 1, -8)
+    toggleImage.Position = UDim2.fromOffset(4, 4)
+    toggleImage.BackgroundTransparency = 1
+    toggleImage.Image = "rbxassetid://98228688068654"
+    toggleImage.ScaleType = Enum.ScaleType.Fit
+    toggleImage.Parent = toggleContainer
+
+    local imageCorner = Instance.new("UICorner")
+    imageCorner.CornerRadius = UDim.new(0, 8)
+    imageCorner.Parent = toggleImage
+
+    local toggleHitbox = Instance.new("TextButton")
+    toggleHitbox.Name = "ToggleHitbox"
+    toggleHitbox.Size = UDim2.fromScale(1, 1)
+    toggleHitbox.BackgroundTransparency = 1
+    toggleHitbox.Text = ""
+    toggleHitbox.AutoButtonColor = false
+    toggleHitbox.ZIndex = 5
+    toggleHitbox.Parent = toggleContainer
+
+    local toggleScale = Instance.new("UIScale")
+    toggleScale.Scale = 1
+    toggleScale.Parent = toggleContainer
+
+    -- 允许拖动 Logo 开关，并限制在当前屏幕安全范围内
+    local toggleDragging = false
+    local toggleDragStart = nil
+    local toggleStartPos = nil
+    local toggleDragInput = nil
+    local toggleMoved = false
+    local toggleDragThreshold = 6
+
+    local function clampTogglePosition(position)
+        local camera = workspace.CurrentCamera
+        local view = camera and camera.ViewportSize or Vector2.new(1280, 720)
+        local size = toggleContainer.AbsoluteSize
+        local insetTopLeft = Vector2.new(0, 0)
+        local insetBottomRight = view
+
+        -- 排除 Roblox 顶部栏/系统安全区；兼容不同客户端 API
+        local ok, topLeft, bottomRight = pcall(function()
+            local a, b = GuiService:GetGuiInset()
+            return a, b
+        end)
+        if ok and topLeft and bottomRight then
+            insetTopLeft = topLeft
+            insetBottomRight = view - bottomRight
+        end
+
+        local minX = insetTopLeft.X + 4
+        local minY = insetTopLeft.Y + 4
+        local maxX = math.max(minX, insetBottomRight.X - size.X - 4)
+        local maxY = math.max(minY, insetBottomRight.Y - size.Y - 4)
+        local x = math.clamp(position.X.Offset, minX, maxX)
+        local y = math.clamp(position.Y.Offset, minY, maxY)
+        return UDim2.fromOffset(x, y)
+    end
+
+    -- 使用绝对坐标拖动，确保不会拖出屏幕边界
+    toggleHitbox.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            toggleDragging = true
+            toggleMoved = false
+            toggleDragStart = input.Position
+            toggleStartPos = toggleContainer.AbsolutePosition
+            toggleDragInput = input
+        end
+    end)
+
+    toggleHitbox.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            toggleDragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not toggleDragging then return end
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            local delta = input.Position - toggleDragStart
+            if delta.Magnitude > toggleDragThreshold then
+                toggleMoved = true
+            end
+            if toggleMoved then
+                local target = UDim2.fromOffset(
+                    toggleStartPos.X + delta.X,
+                    toggleStartPos.Y + delta.Y
+                )
+                toggleContainer.Position = clampTogglePosition(target)
+            end
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if toggleDragging and (
+            input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch
+        ) then
+            toggleDragging = false
+        end
+    end)
 
     local main = Instance.new("Frame")
     main.Name = "MainFrame"
@@ -350,7 +473,7 @@ local function InitUI()
     close.Parent = titleBar
     close.MouseButton1Click:Connect(function()
         main.Visible = false
-        toggleText.Text = "锚点\n菜单"
+        toggleStroke.Color = Color3.fromRGB(82, 88, 98)
     end)
 
     local content = Instance.new("Frame")
@@ -846,9 +969,15 @@ local function InitUI()
         end
     end)
 
-    toggleHitbox.MouseButton1Click:Connect(function()
+    toggleHitbox.Activated:Connect(function()
+        if toggleMoved then
+            toggleMoved = false
+            return
+        end
         main.Visible = not main.Visible
-        toggleText.Text = main.Visible and "关 闭" or "锚点\n菜单"
+        toggleStroke.Color = main.Visible
+            and Color3.fromRGB(105, 177, 120)
+            or Color3.fromRGB(82, 88, 98)
     end)
 
     -- 标题栏拖动（鼠标和触摸）

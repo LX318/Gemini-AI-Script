@@ -14,9 +14,13 @@ local Window = LiquidGlass:CreateWindow({
 local MainTab = Window:AddTab({ Title = "主要功能", Icon = "star" })
 local MainSec = MainTab:AddSection("主要功能")
 
--- 挖矿页（在下）
+-- 挖矿页
 local DigTab = Window:AddTab({ Title = "挖矿", Icon = "home" })
 local Dig = DigTab:AddSection("挖矿")
+
+-- 自动化页（在挖矿下面）
+local AutoTab = Window:AddTab({ Title = "自动化", Icon = "zap" })
+local Auto = AutoTab:AddSection("自动化")
 
 -- ============================================================
 -- 共享变量
@@ -132,13 +136,12 @@ local infoGui
 local timeLabel
 local bagTotalLabel
 
-local TOOL_OFFSET = 8  -- 背包里固定 8 个是工具，不计入物品数
+local TOOL_OFFSET = 8
 
 local function formatClock()
     return os.date("%H:%M:%S")
 end
 
--- 统计背包“物品”数量：Tool 总数 - 8，最小为 0
 local function countBagItems()
     local player = game:GetService("Players").LocalPlayer
     local backpack = player:FindFirstChild("Backpack")
@@ -181,11 +184,10 @@ local function createInfoGui()
     infoGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     infoGui.Parent = playerGui
 
-    -- 极简毛玻璃框：右上角
     local frame = Instance.new("Frame")
     frame.Name = "InfoFrame"
     frame.AnchorPoint = Vector2.new(1, 0)
-    frame.Position = UDim2.new(1, -16, 0, 16)   -- 右上角
+    frame.Position = UDim2.new(1, -16, 0, 16)
     frame.Size = UDim2.new(0, 150, 0, 58)
     frame.BackgroundColor3 = Color3.fromRGB(248, 250, 255)
     frame.BackgroundTransparency = 0.45
@@ -234,7 +236,6 @@ local function createInfoGui()
     timeLabel = makeLabel("TimeLabel", Color3.fromRGB(45, 52, 68), 1)
     bagTotalLabel = makeLabel("BagTotalLabel", Color3.fromRGB(35, 100, 190), 2)
 
-    -- 时间刷新
     task.spawn(function()
         local gui = infoGui
         while gui and gui.Parent do
@@ -245,7 +246,6 @@ local function createInfoGui()
         end
     end)
 
-    -- 背包数量刷新
     task.spawn(function()
         local gui = infoGui
         while gui and gui.Parent do
@@ -267,8 +267,78 @@ local function destroyInfoGui()
     end
 end
 
--- 默认创建
 createInfoGui()
+
+-- ============================================================
+-- 自动化：自动装备星火铲
+-- ============================================================
+local autoEquipEnabled = false
+local equipInterval = 0.01
+local EQUIP_TOOL_NAME = "Starfire Shovel"
+
+local function equipToolOnce()
+    local player = game:GetService("Players").LocalPlayer
+    local character = player.Character
+    if not character then return end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local backpack = player:FindFirstChild("Backpack")
+    if not humanoid or not backpack then return end
+
+    local tool = backpack:FindFirstChild(EQUIP_TOOL_NAME)
+    if tool and tool:IsA("Tool") then
+        humanoid:EquipTool(tool)
+    end
+end
+
+local function autoEquipLoop()
+    while autoEquipEnabled do
+        local ok, err = pcall(equipToolOnce)
+        if not ok then
+            warn("[dig] 自动装备失败: " .. tostring(err))
+        end
+
+        local waited = 0
+        while waited < equipInterval and autoEquipEnabled do
+            local step = math.min(0.05, equipInterval - waited)
+            task.wait(step)
+            waited = waited + step
+        end
+    end
+end
+
+-- ============================================================
+-- 自动化：自动点击屏幕
+-- ============================================================
+local autoClickEnabled = false
+local clickInterval = 4
+local clickLoopThread = nil
+
+local function autoClickLoop()
+    local VIM = game:GetService("VirtualInputManager")
+
+    while autoClickEnabled do
+        local waited = 0
+        while waited < clickInterval and autoClickEnabled do
+            local step = math.min(0.05, clickInterval - waited)
+            task.wait(step)
+            waited = waited + step
+        end
+        if not autoClickEnabled then break end
+
+        local ok, err = pcall(function()
+            local Camera = workspace.CurrentCamera
+            if not Camera then return end
+            local screenPos = Camera.ViewportSize / 2
+            VIM:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, true, game, 0)
+            task.wait(0.05)
+            VIM:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, false, game, 0)
+        end)
+        if not ok then
+            warn("[dig] 自动点击失败: " .. tostring(err))
+        end
+    end
+end
 
 -- ============================================================
 -- 主要功能页控件
@@ -437,6 +507,58 @@ Dig:AddButton({
         end)
         if not success then
             warn("[dig] 手动打boss失败: " .. tostring(err))
+        end
+    end
+})
+
+-- ============================================================
+-- 自动化页控件
+-- ============================================================
+Auto:AddToggle({
+    Title = "自动装备星火铲",
+    Flag = "auto_equip_shovel",
+    Callback = function(on)
+        autoEquipEnabled = on
+
+        if on then
+            coroutine.wrap(autoEquipLoop)()
+        end
+    end
+})
+
+Auto:AddInput({
+    Title = "装备间隔(秒)",
+    Default = "0.01",
+    Callback = function(text)
+        local num = tonumber(text)
+        if num and num > 0 then
+            equipInterval = num
+        end
+    end
+})
+
+Auto:AddToggle({
+    Title = "自动点击屏幕",
+    Flag = "auto_click_screen",
+    Callback = function(on)
+        autoClickEnabled = on
+
+        if on then
+            if not clickLoopThread or coroutine.status(clickLoopThread) == "dead" then
+                clickLoopThread = coroutine.create(autoClickLoop)
+            end
+            coroutine.resume(clickLoopThread)
+        end
+    end
+})
+
+Auto:AddInput({
+    Title = "点击间隔(秒)",
+    Default = "4",
+    Callback = function(text)
+        local num = tonumber(text)
+        if num and num > 0 then
+            clickInterval = num
         end
     end
 })

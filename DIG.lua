@@ -25,7 +25,7 @@ local autoHitEnabled = false
 local miningConnection = nil
 
 local autoBossEnabled = false
-local bossInterval = 0.1
+local bossInterval = 0.8
 
 -- ============================================================
 -- 自动强力挖掘
@@ -82,7 +82,7 @@ end
 -- 秒挖
 -- ============================================================
 local instantDigEnabled = false
-local digDelay = 0.1
+local digDelay = 0.8
 local digLoopThread = nil
 
 local digArgs = {
@@ -126,8 +126,166 @@ local function instantDigLoop()
 end
 
 -- ============================================================
+-- 外置小 GUI：当前时间 + 背包物品数量（极简毛玻璃 / 右上角）
+-- ============================================================
+local infoGui
+local timeLabel
+local bagTotalLabel
+
+local TOOL_OFFSET = 8  -- 背包里固定 8 个是工具，不计入物品数
+
+local function formatClock()
+    return os.date("%H:%M:%S")
+end
+
+-- 统计背包“物品”数量：Tool 总数 - 8，最小为 0
+local function countBagItems()
+    local player = game:GetService("Players").LocalPlayer
+    local backpack = player:FindFirstChild("Backpack")
+    local char = player.Character
+
+    local toolCount = 0
+
+    if backpack then
+        for _, child in ipairs(backpack:GetChildren()) do
+            if child:IsA("Tool") then
+                toolCount = toolCount + 1
+            end
+        end
+    end
+
+    if char then
+        for _, child in ipairs(char:GetChildren()) do
+            if child:IsA("Tool") then
+                toolCount = toolCount + 1
+            end
+        end
+    end
+
+    local items = toolCount - TOOL_OFFSET
+    if items < 0 then items = 0 end
+    return items
+end
+
+local function createInfoGui()
+    local player = game:GetService("Players").LocalPlayer
+    local playerGui = player:WaitForChild("PlayerGui")
+
+    local existing = playerGui:FindFirstChild("LingLangInfoGui")
+    if existing then existing:Destroy() end
+
+    infoGui = Instance.new("ScreenGui")
+    infoGui.Name = "LingLangInfoGui"
+    infoGui.ResetOnSpawn = false
+    infoGui.IgnoreGuiInset = true
+    infoGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    infoGui.Parent = playerGui
+
+    -- 极简毛玻璃框：右上角
+    local frame = Instance.new("Frame")
+    frame.Name = "InfoFrame"
+    frame.AnchorPoint = Vector2.new(1, 0)
+    frame.Position = UDim2.new(1, -16, 0, 16)   -- 右上角
+    frame.Size = UDim2.new(0, 150, 0, 58)
+    frame.BackgroundColor3 = Color3.fromRGB(248, 250, 255)
+    frame.BackgroundTransparency = 0.45
+    frame.BorderSizePixel = 0
+    frame.Parent = infoGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.65
+    stroke.Parent = frame
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingTop = UDim.new(0, 8)
+    padding.PaddingBottom = UDim.new(0, 8)
+    padding.PaddingLeft = UDim.new(0, 12)
+    padding.PaddingRight = UDim.new(0, 12)
+    padding.Parent = frame
+
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Vertical
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 4)
+    layout.Parent = frame
+
+    local function makeLabel(name, color, order)
+        local label = Instance.new("TextLabel")
+        label.Name = name
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, 0, 0, 18)
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 13
+        label.TextColor3 = color
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.TextYAlignment = Enum.TextYAlignment.Center
+        label.Text = ""
+        label.LayoutOrder = order
+        label.Parent = frame
+        return label
+    end
+
+    timeLabel = makeLabel("TimeLabel", Color3.fromRGB(45, 52, 68), 1)
+    bagTotalLabel = makeLabel("BagTotalLabel", Color3.fromRGB(35, 100, 190), 2)
+
+    -- 时间刷新
+    task.spawn(function()
+        local gui = infoGui
+        while gui and gui.Parent do
+            if timeLabel then
+                timeLabel.Text = "时间  " .. formatClock()
+            end
+            task.wait(1)
+        end
+    end)
+
+    -- 背包数量刷新
+    task.spawn(function()
+        local gui = infoGui
+        while gui and gui.Parent do
+            local ok, n = pcall(countBagItems)
+            if ok and bagTotalLabel then
+                bagTotalLabel.Text = "物品  " .. tostring(n)
+            end
+            task.wait(0.5)
+        end
+    end)
+end
+
+local function destroyInfoGui()
+    if infoGui then
+        infoGui:Destroy()
+        infoGui = nil
+        timeLabel = nil
+        bagTotalLabel = nil
+    end
+end
+
+-- 默认创建
+createInfoGui()
+
+-- ============================================================
 -- 主要功能页控件
 -- ============================================================
+MainSec:AddToggle({
+    Title = "显示外置UI",
+    Default = true,
+    Flag = "show_info_gui",
+    Callback = function(on)
+        if on then
+            createInfoGui()
+        else
+            destroyInfoGui()
+        end
+    end
+})
+
 MainSec:AddButton({
     Title = "传送到旅行商人上方5米",
     Style = "Primary",
@@ -228,7 +386,7 @@ Dig:AddToggle({
 
 Dig:AddInput({
     Title = "打boss间隔(秒)",
-    Default = "0.1",
+    Default = "0.8",
     Callback = function(text)
         local num = tonumber(text)
         if num and num > 0 then
@@ -254,7 +412,7 @@ Dig:AddToggle({
 
 Dig:AddInput({
     Title = "挖掘延迟(秒)",
-    Default = "0.1",
+    Default = "0.8",
     Callback = function(text)
         local num = tonumber(text)
         if num and num > 0 then

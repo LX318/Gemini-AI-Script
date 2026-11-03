@@ -479,7 +479,7 @@ end)
 -- 调试扫描
 MonsterSec:AddButton({
 
-    Title = "扫描当前所有boss",
+    Title = "【调试】扫描 Debris 当前所有名字",
 
     Callback = function()
 
@@ -1263,7 +1263,8 @@ MainSec:AddToggle({
 
 })
 
--- 旅行商人MainSec:AddButton({
+-- 旅行商人传送
+MainSec:AddButton({
 
     Title = "传送到旅行商人上方5米",
 
